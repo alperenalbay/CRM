@@ -29,9 +29,9 @@ jobs:
           --health-retries 10
           --health-start-period 40s
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
@@ -41,6 +41,7 @@ jobs:
           curl -fsSL https://packages.microsoft.com/config/ubuntu/24.04/prod.list | sudo tee /etc/apt/sources.list.d/mssql-release.list
           sudo apt-get update
           sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+          /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'CI_Devatek_2026!Strong' -C -Q "SELECT 1" -b
 
       - name: Bağımlılıklar
         run: |
@@ -50,7 +51,7 @@ jobs:
       - name: Şema + seed
         working-directory: backend
         env:
-          DATABASE_URL: mssql+pyodbc://sa:${{ env.MSSQL_SA }}@localhost:1433/CRM?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
+          DATABASE_URL: "mssql+pyodbc://sa:CI_Devatek_2026!Strong@localhost:1433/CRM?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
           JWT_SECRET: ci-test-secret
         run: |
           python -m app.scripts.create_database
@@ -60,17 +61,17 @@ jobs:
       - name: Testler
         working-directory: backend
         env:
-          DATABASE_URL: mssql+pyodbc://sa:${{ env.MSSQL_SA }}@localhost:1433/CRM?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
+          DATABASE_URL: "mssql+pyodbc://sa:CI_Devatek_2026!Strong@localhost:1433/CRM?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
           JWT_SECRET: ci-test-secret
-        run: python -m pytest -q
+        run: python -m pytest -v
 
   frontend:
     name: Frontend build + lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
@@ -94,7 +95,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: SSH anahtarı
         env:
