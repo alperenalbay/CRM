@@ -1,0 +1,129 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  MSSQL_SA: "CI_Devatek_2026!Strong"
+
+jobs:
+  backend:
+    name: Backend testleri
+    runs-on: ubuntu-latest
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: ${{ env.MSSQL_SA }}
+          MSSQL_PID: Developer
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P '${{ env.MSSQL_SA }}' -C -Q 'SELECT 1' -b"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 40s
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: ODBC 18 sürücüsü kur
+        run: |
+          curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+          curl -fsSL https://packages.microsoft.com/config/ubuntu/24.04/prod.list | sudo tee /etc/apt/sources.list.d/mssql-release.list
+          sudo apt-get update
+          sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+
+      - name: Bağımlılıklar
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+
+      - name: Şema + seed
+        working-directory: backend
+        env:
+          DATABASE_URL: mssql+pyodbc://sa:${{ env.MSSQL_SA }}@localhost:1433/CRM?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
+          JWT_SECRET: ci-test-secret
+        run: |
+          python -m app.scripts.create_database
+          alembic upgrade head
+          python -m app.scripts.seed
+
+      - name: Testler
+        working-directory: backend
+        env:
+          DATABASE_URL: mssql+pyodbc://sa:${{ env.MSSQL_SA }}@localhost:1433/CRM?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
+          JWT_SECRET: ci-test-secret
+        run: python -m pytest -q
+
+  frontend:
+    name: Frontend build + lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Bağımlılıklar
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+  deploy:
+    name: VPS dağıtımı
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: SSH anahtarı
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Kaynakları senkronize et
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          rsync -az --delete \
+            --exclude='.git' \
+            --exclude='.env' \
+            --exclude='backend/.venv' \
+            --exclude='backend/.pytest_cache' \
+            --exclude='frontend/node_modules' \
+            --exclude='frontend/test-results' \
+            --exclude='frontend/playwright-report' \
+            ./ "$VPS_USER@$VPS_HOST:/opt/crm/"
+
+      - name: Dağıt
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: ssh "$VPS_USER@$VPS_HOST" "cd /opt/crm && chmod +x scripts/deploy.sh && ./scripts/deploy.sh"

@@ -1,0 +1,29 @@
+# Node
+node_modules/
+frontend/dist/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.egg-info/
+
+# Env
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Test artifacts
+frontend/test-results/
+frontend/playwright-report/
+frontend/pw_out.txt

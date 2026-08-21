@@ -1,0 +1,7 @@
+# DOMAIN dolu olmalı ve VPS'in public IP'sine yönlendirilmiş olmalıdır.
+# Örnek: crm.example.com
+# DOMAIN boşsa Caddy yalnızca localhost içte çalışır (tls internal).
+{$DOMAIN:localhost} {
+    encode gzip zstd
+    reverse_proxy frontend:80
+}
