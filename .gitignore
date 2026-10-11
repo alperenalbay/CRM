@@ -27,3 +27,13 @@ Thumbs.db
 frontend/test-results/
 frontend/playwright-report/
 frontend/pw_out.txt
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
+
+# Kisisel ajan yapilandirmasi — makineye bagli, paylasilmaz
+opencode.json
+.gemini/
+
+# Gunlukler (arac ciktisi, deger tasimaz)
+*.log
